@@ -108,6 +108,17 @@ class salesforce_main_handler:
 
         return results
     
+    def get_payer_eligible_trackers_for_payers(self, formatted_medicare_numbers, formatted_insurance_numbers): 
+        patients_dict = {}
+        soql = f"""SELECT Id, Name, Speciment_Collected_Date__c, Amount_Paid__c, Precision_Final_Payer__c, Payment_To_Precision_Amount__c, Patient__r.Medicaid__c, Patient__r.Medicare__c, Patient__r.Insurance__c,
+        Patient__r.Name, Patient__r.First_Name__c, Patient__r.Last_Name__c, Patient__r.SSN__c, Patient__r.Id 
+        FROM Eligiblity_Tracker__c 
+        WHERE Speciment_Collected_Date__c != null and (Patient__r.Medicaid__c in ({formatted_insurance_numbers}) or Patient__r.Medicare__c in ({formatted_medicare_numbers}) or Patient__r.Insurance__c in ({formatted_insurance_numbers}))"""
+        results = self.sf.query_all(soql)
+        for result in results['records']: 
+            patients_dict[result['Patient__r']['Id']] = result
+        return patients_dict
+
     def update_eligibility_trackers(self, tracker_list): 
         if len(tracker_list) > 0: 
             results = self.sf.bulk.Eligiblity_Tracker__c.update(tracker_list)
