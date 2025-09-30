@@ -12,7 +12,7 @@ class test_creator:
         self.sf_lis = sf_lis_handler()
         self.CHUNK_SIZE = 25
         self.sf_main = salesforce_main_handler()
-        self.lis_account, self.lis_doctors, self.lis_patients, self.eligibilty_by_main_id, self.eligiblity_by_main_patient_id, self.patient_list, self.eligibility_by_patient_ssn = self.sf_lis.get_sf_data()
+        self.patient_insurances, self.lis_insurances, self.lis_account, self.lis_doctors, self.lis_patients, self.eligibilty_by_main_id, self.eligiblity_by_main_patient_id, self.patient_list, self.eligibility_by_patient_ssn = self.sf_lis.get_sf_data()
         self.main_accounts = self.sf_main.get_all_accounts()
         pass
 
@@ -30,8 +30,12 @@ class test_creator:
             self.account_id_list = []
             self.created_provider_set = set()
             self.created_patient_set = set()
+            self.created_insurance_set = set()
             self.facility_parent_company_dict = {}
             self.facility_company_dict = {}
+            self.insurances_toCreate = []
+            self.insurances_to_update = []
+            self.patient_insurances_to_create = []
             self.create_provider_list = []
             self.facilities_to_create = []
             self.update_trackers_list = []
@@ -49,6 +53,9 @@ class test_creator:
                 self.crud_accounts(tracker)
                 #this is for modifying patient records
                 self.crud_patient(configure, curr_patient)
+                self.crud_insurances(tracker)
+                
+
                 curr_provider = tracker.get('Doctor__r', None)
                 if curr_provider == None: 
                     continue
@@ -77,10 +84,38 @@ class test_creator:
             new_providers = self.sf_lis.add_providers(self.create_provider_list)
             self.lis_doctors.update(new_providers)
 
+            self.lis_insurances.update(self.insurances_to_update)
+            new_insurances = self.sf_lis.create_insurances(self.insurances_toCreate)
+            self.lis_insurances.update(new_insurances)
+
             self.sf_lis.update_patients(self.update_patient_list)
             new_patients, new_patient_list = self.sf_lis.add_patients(self.create_patient_list)
             self.lis_patients.update(new_patients)
-            self.patient_list += new_patient_list
+            self.patient_list = new_patient_list
+
+            #check if there are any patient insurances to create by looping through the patients 
+            for patient in chunk:
+                patient_on_tracker = self.eligibility_tracker.get(patient, None).get('Patient__r', None)
+                insurance_on_tracker = self.eligibility_tracker.get(patient, None).get('Payer__r', None)
+                patient_id = self.lis_patients.get(patient_on_tracker.get('Id', None)).get('Id', None)
+                insurance_id = self.lis_insurances.get(insurance_on_tracker.get('Id', None)).get('Id', None)
+                lis_patient_insurance = self.patient_insurances.get(patient_id) 
+                if lis_patient_insurance is None: 
+                    self.patient_insurances_to_create.append({
+                        'Patient__c': patient_id,
+                        'Insurance__c': insurance_id,
+                        'Type__c': 'Primary',
+                        'Name': f"{patient_on_tracker.get('Name', None)} - {insurance_on_tracker.get('Name', None)}"
+                    })
+                #if there already is a patient insurance, check if its the same insurance as on the tracker, if not update it
+                elif lis_patient_insurance is not None and lis_patient_insurance.get('Insurance__c', None) != insurance_id:
+                    self.patient_insurances_to_create.append({
+                        'Patient__c': patient_id,
+                        'Insurance__c': insurance_id, 
+                        'Type__c': 'Primary',
+                        'Name': f"{patient_on_tracker.get('Name', None)} - {insurance_on_tracker.get('Name', None)}"
+                    })
+            self.sf_lis.crrate_patient_insurances(self.patient_insurances_to_create)
 
             for tracker_id in chunk: 
                 tracker = self.eligibility_tracker.get(tracker_id, None)
@@ -131,6 +166,42 @@ class test_creator:
             self.sf_main.update_eligibility_trackers(self.update_trackers_list)
             pass
         pass
+
+    def crud_insurances(self, tracker):
+        curr_payer = tracker.get('Payer__r', None)
+        if curr_payer != None and curr_payer['Id'] not in self.lis_insurances and curr_payer['Id'] not in self.created_insurance_set: 
+            self.insurances_toCreate.append({
+                        'Name': curr_payer.get('Name', None),
+                        'Insurance_ID__c': curr_payer.get('Insurance_ID__c', None),
+                        'State__c': curr_payer.get('State__c', None),
+                        'Type__c': curr_payer.get('Type__c', None),
+                        'Payer_Code__c': curr_payer.get('Payer_Code__c', None),
+                        'Insurance_Main_Id__c': curr_payer.get('Id', None)
+                    })
+            self.created_insurance_set.add(curr_payer['Id'])
+        elif curr_payer['Id'] in self.created_insurance_set:
+            pass
+        else:
+            temp_insurance_update_dict = {}
+            curr_lis_insurance = self.lis_insurances.get(curr_payer['Id'], None)
+            if curr_lis_insurance:
+                if curr_lis_insurance['Name'] != curr_payer['Name']:
+                    temp_insurance_update_dict['Name'] = curr_payer['Name']
+                if curr_lis_insurance['Insurance_ID__c'] != curr_payer['Insurance_ID__c']:
+                    temp_insurance_update_dict['Insurance_ID__c'] = curr_payer['Insurance_ID__c']
+                if curr_lis_insurance['State__c'] != curr_payer['State__c']:
+                    temp_insurance_update_dict['State__c'] = curr_payer['State__c']
+                if curr_lis_insurance['Type__c'] != curr_payer['Type__c']:
+                    temp_insurance_update_dict['Type__c'] = curr_payer['Type__c']
+                if curr_lis_insurance['Payer_Code__c'] != curr_payer['Payer_Code__c']:
+                    temp_insurance_update_dict['Payer_Code__c'] = curr_payer['Payer_Code__c']
+                if curr_lis_insurance['Insurance_Main_Id__c'] != curr_payer['Id']:
+                    temp_insurance_update_dict['Insurance_Main_Id__c'] = curr_payer['Id']
+            if temp_insurance_update_dict:
+                self.insurances_to_update.append({
+                            'Id': curr_lis_insurance['Id'],
+                            'fields': temp_insurance_update_dict
+                        })
 
 
     def create_account(self, parent_company_id, account_info):

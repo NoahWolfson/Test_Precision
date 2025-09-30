@@ -24,7 +24,7 @@ class salesforce_main_handler:
 
 
     def get_eligiblity_trackers(self, eligible_states): 
-        soql = f"""SELECT Id, Name, Speciment_Collected_Date__c, 
+        soql = f"""SELECT Id, Name, Speciment_Collected_Date__c, Payer__c, Payer__r.Name, Payer__r.Id, Payer__r.Payer_Code__c, Payer__r.State__c, Payer__r.Type__c, Payer__r.Insurance_ID__c, 
         Patient__r.Name, Patient__r.First_Name__c, Patient__r.Last_Name__c, Patient__r.SSN__c, Patient__r.Id, Patient__r.DOB__c, Patient__r.Gender__c, 
             Patient__r.Normalized_SSN__c, Patient__r.Medicaid__c, Patient__r.Medicare__c, Patient__r.MRN__c,  Patient__r.Status__c,
         Account__r.Type, Account__r.Name,  Account__r.Id, Account__r.Website, Account__r.Description, Account__r.Phone, Account__r.Industry, Account__r.NumberOfEmployees,

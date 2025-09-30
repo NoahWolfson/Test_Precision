@@ -14,9 +14,9 @@ class sf_lis_handler:
     
     def __init__(self):
 
-        sf_url = os.environ.get('SF_LIS_TOKEN_URL')
-        sf_client_id = os.environ.get('SF_LIS_CLIENT_ID')
-        sf_client_secret = os.environ.get('SF_LIS_CLIENT_SECRET')
+        sf_url = os.environ.get('PRECISION_TOKEN_URL')
+        sf_client_id = os.environ.get('PRECISION_CLIENT_ID')
+        sf_client_secret = os.environ.get('PRECISION_CLIENT_SECRET')
 
         self.sf = get_sf_instance(sf_url,sf_client_id,sf_client_secret)
         pass
@@ -30,8 +30,17 @@ class sf_lis_handler:
     def get_sf_data(self): 
         eligibilty_by_main_id, eligiblity_by_main_patient_id, eligibility_by_patient_ssn = self.get_eligiblity_trackers()
         patient_dict, patient_list = self.get_patients()
-        return self.get_accounts(), self.get_doctors(), patient_dict, eligibilty_by_main_id, eligiblity_by_main_patient_id, patient_list, eligibility_by_patient_ssn
+        return self.get_patient_insurances(), self.get_Insurances(), self.get_accounts(), self.get_doctors(), patient_dict, eligibilty_by_main_id, eligiblity_by_main_patient_id, patient_list, eligibility_by_patient_ssn
     
+    def get_patient_insurances(self): 
+        soql = """SELECT Id, Name, Patient__c, Insurance__c, Type__c 
+                FROM Patient_Insurance__c"""
+        results = self.sf.query_all(soql)
+        insurance_dict = {}
+        for result in results['records']: 
+            insurance_dict[result['Patient__c']] = result
+        return insurance_dict
+
     def get_accounts(self): 
         soql = f"""SELECT Type, Name, Id, Website, Description, Phone,
             Industry, NumberOfEmployees,
@@ -65,6 +74,15 @@ class sf_lis_handler:
         for result in resuls['records']: 
             doctor_dict[result['Main_Salesforce_Id__c']] = result
         return doctor_dict
+    
+    def get_Insurances(self): 
+        soql = """SELECT Id, Name, Insurance_ID__c, State__c, Type__c, Payer_Code__c, Insurance_Main_Id__c
+                FROM Insurance__c"""
+        resuls = self.sf.query_all(soql)
+        insurance_dict = {}
+        for result in resuls['records']: 
+            insurance_dict[result['Insurance_Main_Id__c']] = result
+        return insurance_dict
          
     def get_eligiblity_trackers(self): 
         soql = """SELECT Id, Name, Collection_DateTime__c, Main_Salesforce_Tracker_Id__c, Tracker_ID__c,
@@ -115,6 +133,28 @@ class sf_lis_handler:
             return self.get_eligiblity_trackers()
         else: 
             return {}, {}
+        
+    def create_insurances(self, insurance_list): 
+        if len(insurance_list) > 0: 
+            results = self.sf.bulk.Insurance__c.insert(insurance_list)
+            print(results)
+            return self.get_Insurances()
+        else: 
+            return {}
+        
+    def crrate_patient_insurances(self, patient_insurance_list):
+        if len(patient_insurance_list) > 0: 
+            results = self.sf.bulk.Patient_Insurance__c.insert(patient_insurance_list)
+            print(results)
+            return self.get_patient_insurances()
+        else: 
+            return {}
+        
+    def update_insurances(self, insurance_list): 
+        if len(insurance_list) > 0: 
+            results = self.sf.bulk.Insurance__c.update(insurance_list)
+            print(results)
+            
 
     def update_patients(self, patient_list): 
         if len(patient_list) > 0: 
